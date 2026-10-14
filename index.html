@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Signature Builder</title>
+<meta name="description" content="Design an email signature, add your details, then copy or download it. Runs entirely in your browser.">
+<!--
+  Signature Builder - one self-contained HTML file.
+  No external requests, no cookies, no storage. Everything you type stays in this tab.
+  Licence: MIT No Attribution (see LICENSE).
+-->
+<style>
+/* Layout: masthead with two tabs; left column swaps (Design / Your details), right column is a shared
+   sticky "email sheet" preview. Stacks to one column on phones with the preview first. */
+:root{
+  --bg:#f1f3f6; --surface:#ffffff; --field:#f8fafc; --ink:#17202a; --muted:#5b6672; --line:#d8dee5;
+  --accent:#2f5d7c; --accent-ink:#ffffff; --accent-soft:#e3edf4; --ok:#1d6b45; --ok-bg:#e4f3ea; --warn:#8a5a00; --warn-bg:#fdf3dd;
+  --sheet:#ffffff; --sheet-ink:#6b7480; --sheet-line:#e6e9ed;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151b; --surface:#18202a; --field:#131a22; --ink:#e5eaf0; --muted:#97a3b0; --line:#2a3542;
+    --accent:#88b6d8; --accent-ink:#0d1620; --accent-soft:#1d2d3b; --ok:#7bd3a3; --ok-bg:#15301f; --warn:#f0c66b; --warn-bg:#352a12;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151b; --surface:#18202a; --field:#131a22; --ink:#e5eaf0; --muted:#97a3b0; --line:#2a3542;
+  --accent:#88b6d8; --accent-ink:#0d1620; --accent-soft:#1d2d3b; --ok:#7bd3a3; --ok-bg:#15301f; --warn:#f0c66b; --warn-bg:#352a12;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
+.shell{max-width:1140px;margin:0 auto;padding-block:28px 56px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* masthead */
+.mast{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px;margin-bottom:22px}
+.mast h1{margin:0;font:600 2rem/1.1 var(--serif);letter-spacing:-.01em}
+.mast p{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px}
+.tab{appearance:none;border:0;background:transparent;color:var(--muted);font:500 .92rem var(--sans);padding:9px 16px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.tab .n{font:600 .72rem var(--mono);width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;border:1px solid var(--line)}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+.tab[aria-selected="true"] .n{border-color:transparent;background:var(--accent-ink);color:var(--accent)}
+.tab:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,label.opt:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+
+/* work area */
+.work{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:24px;align-items:start}
+@media (max-width:860px){.work{grid-template-columns:1fr}.stage{order:-1}}
+.panel{display:grid;gap:16px;min-width:0}
+.group{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 18px 20px;min-width:0}
+.group h2{margin:0 0 12px;font:600 1.05rem var(--serif)}
+.group .lede{margin:-6px 0 14px;color:var(--muted);font-size:.86rem}
+.lbl{display:block;font:600 .7rem var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 6px}
+h2+.lbl,.lede+.lbl{margin-top:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:460px){.two{grid-template-columns:1fr}}
+.hint{font-size:.8rem;color:var(--muted);margin:6px 0 0}
+.note{font-size:.82rem;border-radius:7px;padding:8px 11px;margin-top:10px;background:var(--warn-bg);color:var(--warn)}
+
+/* segmented radio */
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--field)}
+.seg label{position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;padding:7px 12px;font-size:.84rem;border-right:1px solid var(--line);white-space:nowrap}
+.seg label:last-child span{border-right:0}
+.seg input:checked+span{background:var(--accent);color:var(--accent-ink)}
+.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* layout picker */
+.layouts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:520px){.layouts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.opt{position:relative;display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--field);cursor:pointer;font-size:.82rem;font-weight:500}
+.opt input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.opt:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:var(--accent-soft)}
+.sch{height:44px;display:flex;gap:4px;align-items:center}
+.sch i{display:block;background:var(--muted);opacity:.55;border-radius:2px;height:4px}
+.sch .b{width:16px;height:16px;border-radius:3px;background:var(--accent);opacity:1}
+.sch .v{width:2px;height:30px;background:var(--accent);opacity:1}
+.sch .col{display:grid;gap:4px;flex:1}
+.sch .nm{height:6px;width:70%;opacity:.9;background:var(--ink)}
+
+/* colours */
+.swatches{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+input[type=color]{width:40px;height:32px;border:1px solid var(--line);border-radius:6px;background:var(--field);padding:2px;cursor:pointer}
+.hex{font:500 .8rem var(--mono);color:var(--muted)}
+.drop{display:flex;align-items:center;gap:14px;border:1.5px dashed var(--line);border-radius:9px;padding:14px;background:var(--field);cursor:pointer}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.drop div{display:grid;gap:2px;min-width:0}
+.drop img{max-width:64px;max-height:64px;flex:none;background:repeating-conic-gradient(var(--line) 0 25%,transparent 0 50%) 0 0/12px 12px}
+
+/* inputs */
+input[type=text],input[type=email],input[type=tel],input[type=url],input[type=number],select,textarea{
+  width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);font:inherit;font-size:.92rem}
+textarea{min-height:84px;resize:vertical;line-height:1.45}
+.field{display:grid;gap:4px;min-width:0}
+.field>span{font-size:.84rem;font-weight:500}
+.field small{color:var(--muted);font-weight:400}
+
+/* field list */
+.flist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.flist li{display:flex;align-items:center;gap:10px;padding:6px 8px 6px 10px;border:1px solid var(--line);border-radius:7px;background:var(--field)}
+.flist li.off{opacity:.62}
+.flist label{display:flex;align-items:center;gap:9px;flex:1;min-width:0;cursor:pointer;font-size:.88rem}
+.flist .mv{display:flex;gap:2px}
+.flist .mv button{width:28px;height:26px;padding:0;border-radius:5px;font-size:.8rem;line-height:1}
+.chk{display:flex;flex-wrap:wrap;gap:8px 18px}
+.chk label{display:flex;align-items:center;gap:8px;font-size:.88rem;cursor:pointer}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);margin:0}
+
+/* buttons */
+button,.btn{font:500 .88rem var(--sans);border-radius:7px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--field);color:var(--ink)}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.primary:hover{filter:brightness(1.07)}
+.next{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+
+/* stage */
+.stage{position:sticky;top:max(16px,env(safe-area-inset-top,0px));display:grid;gap:14px;min-width:0}
+.stagebar{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
+.stagebar .t{font:600 .7rem var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.sheetwrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:hidden}
+.sheet{background:var(--sheet);border-radius:6px;box-shadow:0 1px 0 var(--sheet-line),0 0 0 1px var(--sheet-line);margin:0 auto;max-width:100%;transition:max-width .2s ease}
+.sheet.phone{max-width:360px}
+.mailhead{padding:10px 16px;border-bottom:1px solid var(--sheet-line);font:12px/1.6 var(--sans);color:var(--sheet-ink)}
+.mailhead b{font-weight:600;display:inline-block;min-width:58px}
+.mailbody{padding:16px 16px 22px;font:14px/1.55 Arial,Helvetica,sans-serif;color:#3b4652}
+.mailbody p{margin:0 0 12px}
+.sigbox{overflow-x:auto;padding-top:4px}
+.empty{color:var(--sheet-ink);font:13px var(--sans);border:1px dashed var(--sheet-line);border-radius:6px;padding:14px;text-align:center}
+.actions{display:grid;gap:10px}
+.actions .row button{flex:1 1 auto}
+.toast{padding:9px 12px;border-radius:7px;background:var(--ok-bg);color:var(--ok);font-size:.86rem;font-weight:500}
+
+/* guide */
+details.guide{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 18px}
+details.guide summary{cursor:pointer;font:600 1rem var(--serif)}
+.clients{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:12px}
+.clients div{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--field);min-width:0}
+.clients h3{margin:0 0 6px;font-size:.9rem}
+.clients ol{margin:0;padding-left:18px;font-size:.83rem;color:var(--muted)}
+.clients li{margin-bottom:3px}
+code{font:.8rem var(--mono);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink)}
+.small{font-size:.8rem;color:var(--muted)}
+footer{margin-top:28px;color:var(--muted);font-size:.8rem;max-width:75ch}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="mast">
+    <div>
+      <h1>Signature Builder</h1>
+      <p>Design an email signature, add your details, then copy it into Gmail, Outlook or Apple Mail. Nothing you type leaves this page.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Steps">
+      <button class="tab" role="tab" id="tab-design" aria-controls="panel-design" aria-selected="true" type="button"><span class="n">1</span>Design</button>
+      <button class="tab" role="tab" id="tab-details" aria-controls="panel-details" aria-selected="false" tabindex="-1" type="button"><span class="n">2</span>Your details</button>
+    </div>
+  </header>
+
+  <div class="work">
+    <!-- ============ TAB 1: DESIGN ============ -->
+    <section class="panel" id="panel-design" role="tabpanel" aria-labelledby="tab-design">
+      <div class="group">
+        <h2>Layout</h2>
+        <div class="layouts" id="layouts">
+          <label class="opt"><input type="radio" name="layout" value="side" id="lay-side">
+            <span class="sch"><i class="b"></i><i class="v"></i><span class="col"><i class="nm"></i><i style="width:55%"></i><i style="width:80%"></i></span></span>Side by side</label>
+          <label class="opt"><input type="radio" name="layout" value="stacked" id="lay-stacked">
+            <span class="sch"><span class="col"><i class="nm" style="width:55%"></i><i style="width:40%"></i><i style="height:2px;background:var(--accent);opacity:1"></i><i style="width:75%"></i></span></span>Stacked</label>
+          <label class="opt"><input type="radio" name="layout" value="compact" id="lay-compact">
+            <span class="sch"><span class="col"><i class="nm" style="width:85%"></i><i style="width:95%"></i></span></span>Compact</label>
+          <label class="opt"><input type="radio" name="layout" value="boxed" id="lay-boxed">
+            <span class="sch" style="border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:3px;padding:0 6px"><i class="b" style="width:12px;height:12px"></i><span class="col"><i class="nm"></i><i style="width:65%"></i></span></span>Boxed</label>
+        </div>
+        <span class="lbl">Contact lines</span>
+        <div class="seg" role="radiogroup" aria-label="Contact lines">
+          <label><input type="radio" name="flow" value="rows" id="flow-rows"><span>One per line</span></label>
+          <label><input type="radio" name="flow" value="inline" id="flow-inline"><span>All on one line</span></label>
+        </div>
+        <p class="hint" id="flow-hint" hidden>Compact always puts contact details on one line.</p>
+      </div>
+
+      <div class="group">
+        <h2>Colour</h2>
+        <span class="lbl">Accent</span>
+        <div class="swatches" id="accent-swatches"></div>
+        <div id="contrast-note" class="note" hidden>This accent is light against white. It works for the badge, but labels and links in it may be hard to read.</div>
+        <span class="lbl">Text</span>
+        <div class="swatches" id="text-swatches"></div>
+        <span class="lbl">Links</span>
+        <div class="seg" role="radiogroup" aria-label="Link colour">
+          <label><input type="radio" name="links" value="text" id="links-text"><span>Text colour</span></label>
+          <label><input type="radio" name="links" value="accent" id="links-accent"><span>Accent colour</span></label>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Type</h2>
+        <p class="lede">Only fonts that every mail client already has. Anything else is swapped for a default by the recipient's mail app.</p>
+        <div class="two">
+          <label class="field"><span>Name font</span><select id="nameFont"></select></label>
+          <label class="field"><span>Body font</span><select id="bodyFont"></select></label>
+        </div>
+        <span class="lbl">Size</span>
+        <div class="seg" role="radiogroup" aria-label="Size">
+          <label><input type="radio" name="size" value="s" id="size-s"><span>Small</span></label>
+          <label><input type="radio" name="size" value="m" id="size-m"><span>Medium</span></label>
+          <label><input type="radio" name="size" value="l" id="size-l"><span>Large</span></label>
+        </div>
+        <span class="lbl">Name</span>
+        <div class="chk">
+          <label><input type="checkbox" id="nameBold"> Bold</label>
+          <label><input type="checkbox" id="nameUpper"> Capitals</label>
+          <label><input type="checkbox" id="nameAccent"> In accent colour</label>
+        </div>
+        <span class="lbl">Labels before contact details</span>
+        <div class="seg" role="radiogroup" aria-label="Labels">
+          <label><input type="radio" name="labels" value="words" id="labels-words"><span>Mobile</span></label>
+          <label><input type="radio" name="labels" value="short" id="labels-short"><span>M</span></label>
+          <label><input type="radio" name="labels" value="none" id="labels-none"><span>None</span></label>
+        </div>
+        <span class="lbl">Divider</span>
+        <div class="seg" role="radiogroup" aria-label="Divider">
+          <label><input type="radio" name="divider" value="accent" id="div-accent"><span>Accent line</span></label>
+          <label><input type="radio" name="divider" value="thin" id="div-thin"><span>Thin grey</span></label>
+          <label><input type="radio" name="divider" value="none" id="div-none"><span>None</span></label>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Badge</h2>
+        <div class="seg" role="radiogroup" aria-label="Badge">
+          <label><input type="radio" name="badge" value="initials" id="badge-initials"><span>Initials</span></label>
+          <label><input type="radio" name="badge" value="logo" id="badge-logo"><span>Logo or photo</span></label>
+          <label><input type="radio" name="badge" value="none" id="badge-none"><span>None</span></label>
+        </div>
+        <div id="logo-fields" hidden>
+          <span class="lbl" style="margin-top:14px">Image from</span>
+          <div class="seg" role="radiogroup" aria-label="Image from">
+            <label><input type="radio" name="logoMode" value="upload" id="logo-upload"><span>My computer</span></label>
+            <label><input type="radio" name="logoMode" value="url" id="logo-url"><span>A web address</span></label>
+          </div>
+          <div id="upload-fields" style="margin-top:12px">
+            <div class="drop" id="drop" tabindex="0" role="button" aria-describedby="drop-hint">
+              <img id="logo-thumb" alt="" hidden>
+              <div><strong id="drop-title">Choose an image</strong><span class="small" id="drop-hint">or drop one here. PNG, JPEG, GIF, WebP or SVG.</span></div>
+            </div>
+            <input type="file" id="logo-file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" hidden>
+            <div class="row" style="margin-top:8px" id="upload-actions" hidden>
+              <button type="button" id="logo-replace">Replace</button>
+              <button type="button" id="logo-download">Download resized image</button>
+              <button type="button" id="logo-remove">Remove</button>
+            </div>
+            <p class="hint" id="logo-size" hidden></p>
+            <p class="hint">The image is shrunk and compressed here in your browser, then built into the signature, so it travels with it. Apple Mail and Outlook keep it when you paste. <strong>Gmail doesn’t</strong>: it removes pasted images. For Gmail, paste the signature, then add the image with the image button in Gmail’s signature editor, using the “Download resized image” copy.</p>
+          </div>
+          <div id="url-fields" style="margin-top:12px" hidden>
+            <label class="field"><span>Image address <small>https://</small></span><input type="url" id="logoUrl" placeholder="https://example.com/logo.png"></label>
+            <p class="hint">Use this if the image is already online, for example on your website. It works in every mail app, Gmail included, though some recipients only see it after clicking “show images”.</p>
+          </div>
+          <label class="field" style="margin-top:12px;max-width:200px"><span>Width in pixels</span><input type="number" id="logoWidth" min="24" max="240" step="2"></label>
+        </div>
+        <div id="shape-fields">
+          <span class="lbl">Shape</span>
+          <div class="seg" role="radiogroup" aria-label="Badge shape">
+            <label><input type="radio" name="shape" value="square" id="shape-square"><span>Square</span></label>
+            <label><input type="radio" name="shape" value="rounded" id="shape-rounded"><span>Rounded</span></label>
+            <label><input type="radio" name="shape" value="circle" id="shape-circle"><span>Circle</span></label>
+          </div>
+          <p class="hint" id="shape-hint" hidden>Classic Outlook for Windows ignores rounded corners and shows a square.</p>
+          <p class="hint" id="shape-hint-up" hidden>The shape is cut into the uploaded image itself, so it shows the same in every mail app, Outlook included. A circle crops the image to a square first.</p>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>What to include</h2>
+        <p class="lede">Ticked items get a box on the next tab. Use the arrows to set the order of contact lines. Anything left blank there is left out.</p>
+        <span class="lbl">About you</span>
+        <div class="chk" id="ident-fields"></div>
+        <span class="lbl">Contact lines</span>
+        <ul class="flist" id="contact-fields"></ul>
+        <span class="lbl">Extras</span>
+        <div class="chk" id="extra-fields"></div>
+      </div>
+
+      <div class="group">
+        <h2>Settings file</h2>
+        <p class="lede">This page keeps nothing once the tab is closed. Save a settings file to pick up where you left off, or to give a team the same design.</p>
+        <div class="row">
+          <button type="button" id="save-settings">Save settings</button>
+          <button type="button" id="open-settings">Open settings…</button>
+          <button type="button" id="reset-design">Reset design</button>
+          <input type="file" id="settings-file" accept=".json,application/json" hidden>
+        </div>
+      </div>
+
+      <div class="next"><button type="button" class="primary" data-go="details">Next: your details →</button></div>
+    </section>
+
+    <!-- ============ TAB 2: YOUR DETAILS ============ -->
+    <section class="panel" id="panel-details" role="tabpanel" aria-labelledby="tab-details" hidden>
+      <div class="group">
+        <h2>Your details</h2>
+        <p class="lede">Only the items ticked on the Design tab are shown. Leave a box blank and that line is dropped.</p>
+        <form id="details-form" autocomplete="on" novalidate>
+          <div class="panel" id="details-fields" style="gap:12px"></div>
+        </form>
+      </div>
+
+      <details class="guide" id="guide" open>
+        <summary>Where to paste it</summary>
+        <div class="clients">
+          <div><h3>Gmail (web)</h3><ol>
+            <li>Settings (gear) → <code>See all settings</code> → General.</li>
+            <li>Signature → <code>Create new</code>, name it, click in the box and paste.</li>
+            <li>Choose it under “Signature defaults”.</li>
+            <li>Scroll to the bottom and <code>Save Changes</code>.</li></ol></div>
+          <div><h3>Outlook</h3><ol>
+            <li>New Outlook and Outlook on the web: Settings → Account → Signatures.</li>
+            <li>Classic Outlook for Windows: File → Options → Mail → Signatures.</li>
+            <li>Outlook for Mac: Outlook → Settings → Signatures.</li>
+            <li>Create a new signature, paste, set it as the default and save.</li></ol></div>
+          <div><h3>Apple Mail (Mac)</h3><ol>
+            <li>Mail → Settings → Signatures, pick the account, click <code>+</code>.</li>
+            <li>Untick <code>Always match my default message font</code> first, or the styling is removed.</li>
+            <li>Select the placeholder text and paste.</li></ol></div>
+          <div><h3>iPhone and iPad</h3><ol>
+            <li>Settings → Apps → Mail → Signature.</li>
+            <li>iOS keeps very little formatting. Use <code>Copy plain text</code>.</li></ol></div>
+          <div><h3>Thunderbird</h3><ol>
+            <li>Account Settings → your account.</li>
+            <li>Tick <code>Attach the signature from a file</code> and choose the downloaded .html file.</li>
+            <li>Or tick <code>Use HTML</code> and paste the HTML code.</li></ol></div>
+        </div>
+        <p class="small" style="margin:12px 0 0">If a paste comes out unstyled, open the downloaded .html file in a browser, press Ctrl+A (Cmd+A on a Mac), copy, and paste that instead.</p>
+      </details>
+
+      <div class="next"><button type="button" data-go="design">← Back to design</button></div>
+    </section>
+
+    <!-- ============ SHARED PREVIEW ============ -->
+    <aside class="stage" aria-label="Preview">
+      <div class="stagebar">
+        <span class="t">Preview</span>
+        <div class="row">
+          <div class="seg" role="radiogroup" aria-label="Preview content" id="mode-seg">
+            <label><input type="radio" name="mode" value="sample" id="mode-sample"><span>Sample details</span></label>
+            <label><input type="radio" name="mode" value="mine" id="mode-mine"><span>My details</span></label>
+          </div>
+          <div class="seg" role="radiogroup" aria-label="Preview width">
+            <label><input type="radio" name="width" value="desktop" id="w-desktop" checked><span>Desktop</span></label>
+            <label><input type="radio" name="width" value="phone" id="w-phone"><span>Phone</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="sheetwrap">
+        <div class="sheet" id="sheet">
+          <div class="mailhead" aria-hidden="true"><div><b>To</b>Sam Price</div><div><b>Subject</b>Re: Thursday’s meeting</div></div>
+          <div class="mailbody">
+            <p aria-hidden="true">Hi Sam,</p>
+            <p aria-hidden="true">Thanks for this. I’ll send the figures over before Thursday.</p>
+            <div class="sigbox" id="preview"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions" id="actions" hidden>
+        <div class="row">
+          <button type="button" class="primary" id="copy-rich">Copy signature</button>
+          <button type="button" id="copy-plain">Copy plain text</button>
+          <button type="button" id="copy-html">Copy HTML code</button>
+        </div>
+        <div class="row">
+          <button type="button" id="dl-html">Download .html</button>
+          <button type="button" id="dl-txt">Download .txt</button>
+        </div>
+        <details>
+          <summary class="small" style="cursor:pointer">Show HTML code</summary>
+          <textarea id="code" readonly aria-label="Signature HTML code" style="margin-top:8px;font:.74rem/1.4 var(--mono);min-height:140px"></textarea>
+        </details>
+      </div>
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    </aside>
+  </div>
+
+  <footer>
+    Runs entirely in your browser: no requests to anywhere, no cookies, nothing stored. Mail apps all render HTML differently, so send yourself a test email before relying on it. Free to use and adapt (MIT No Attribution).
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ------------------------------------------------------------------ data */
+var FONTS = {
+  arial:     {label:"Arial",           stack:"Arial,Helvetica,sans-serif"},
+  helvetica: {label:"Helvetica",       stack:"Helvetica,Arial,sans-serif"},
+  verdana:   {label:"Verdana",         stack:"Verdana,Geneva,sans-serif"},
+  tahoma:    {label:"Tahoma",          stack:"Tahoma,Verdana,Geneva,sans-serif"},
+  trebuchet: {label:"Trebuchet MS",    stack:"'Trebuchet MS',Helvetica,Arial,sans-serif"},
+  georgia:   {label:"Georgia",         stack:"Georgia,'Times New Roman',Times,serif"},
+  times:     {label:"Times New Roman", stack:"'Times New Roman',Times,serif"},
+  courier:   {label:"Courier New",     stack:"'Courier New',Courier,monospace"}
+};
+var SIZES = { s:{name:16,body:12,small:11,badge:46}, m:{name:18,body:13,small:11,badge:54}, l:{name:21,body:14,small:12,badge:62} };
+var ACCENTS = [["#2F5D7C","Ink blue"],["#1F6650","Bottle green"],["#8A2D3B","Oxblood"],["#5B4B8A","Plum"],["#B4531F","Burnt orange"],["#0E7C86","Teal"],["#2B2F33","Graphite"]];
+var TEXTS = [["#1F2328","Near black"],["#2B3A4A","Slate"],["#333333","Charcoal"],["#3D3A36","Warm grey"]];
+
+/* Sample details use Ofcom's drama number ranges and example.com, so none of them reach a real person. */
+var FIELDS = {
+  name:      {label:"Full name", kind:"ident", auto:"name", sample:"Alex Morgan"},
+  pronouns:  {label:"Pronouns", kind:"ident", ph:"e.g. she/her", sample:"they/them"},
+  title:     {label:"Job title", kind:"ident", auto:"organization-title", sample:"Operations Manager"},
+  company:   {label:"Organisation", kind:"ident", auto:"organization", sample:"Harbour & Vale Ltd"},
+  mobile:    {label:"Mobile", kind:"contact", type:"tel", auto:"tel", link:"tel", words:"Mobile", short:"M", sample:"07700 900123"},
+  phone:     {label:"Phone", kind:"contact", type:"tel", link:"tel", words:"Phone", short:"T", sample:"029 2018 0456"},
+  email:     {label:"Email", kind:"contact", type:"email", auto:"email", link:"mail", words:"Email", short:"E", sample:"alex.morgan@example.com"},
+  website:   {label:"Website", kind:"contact", link:"url", words:"Web", short:"W", ph:"example.com", sample:"example.com"},
+  linkedin:  {label:"LinkedIn", kind:"contact", link:"url", words:"LinkedIn", short:"in", ph:"linkedin.com/in/your-name", sample:"linkedin.com/in/alex-morgan"},
+  github:    {label:"GitHub", kind:"contact", link:"url", words:"GitHub", short:"GH", ph:"github.com/username", sample:"github.com/alexmorgan"},
+  x:         {label:"X", kind:"contact", link:"url", words:"X", short:"X", ph:"x.com/username", sample:"x.com/alexmorgan"},
+  instagram: {label:"Instagram", kind:"contact", link:"url", words:"Instagram", short:"IG", ph:"instagram.com/username", sample:"instagram.com/alexmorgan"},
+  booking:   {label:"Booking link", kind:"contact", link:"url", words:"Book", short:"B", ph:"e.g. a calendar booking page", sample:"example.com/book"},
+  custom:    {label:"Other link", kind:"contact", link:"url", words:"Link", short:"L", ph:"https://…", sample:"example.com/portfolio", hasLabel:true},
+  address:   {label:"Address", kind:"contact", link:"none", auto:"street-address", words:"Address", short:"A", sample:"1 Example Street, Cardiff CF10 1AA"},
+  signoff:   {label:"Sign-off", kind:"extra", ph:"e.g. Kind regards,", sample:"Kind regards,"},
+  hours:     {label:"Working hours note", kind:"extra", ph:"e.g. I work Monday to Thursday.", sample:"I work Monday to Thursday. Please don’t feel you need to reply outside your own hours."},
+  disclaimer:{label:"Disclaimer", kind:"extra", type:"textarea", sample:"This email and any attachments are confidential and meant only for the person they are addressed to. If you have received it by mistake, please let the sender know and delete it."}
+};
+var CONTACT_IDS = Object.keys(FIELDS).filter(function(k){return FIELDS[k].kind==="contact";});
+
+var DEFAULT_DESIGN = {
+  layout:"side", flow:"rows", accent:"#2F5D7C", text:"#1F2328", links:"text",
+  nameFont:"georgia", bodyFont:"arial", size:"m", nameBold:true, nameUpper:false, nameAccent:false,
+  labels:"words", divider:"accent", badge:"initials", shape:"square", logoMode:"upload", logoUrl:"", logoWidth:64, logoData:"", logoName:"",
+  fields:{pronouns:false,title:true,company:true,mobile:true,phone:false,email:true,website:true,linkedin:true,github:false,x:false,instagram:false,booking:false,custom:false,address:false,signoff:false,hours:false,disclaimer:false},
+  order:CONTACT_IDS.slice()
+};
+
+var design = clone(DEFAULT_DESIGN);
+var details = {};          // field id -> string; plus customLabel
+var mode = "sample";       // preview content
+var activeTab = "design";
+var dirty = false;
+
+/* --------------------------------------------------------------- helpers */
+function clone(o){return JSON.parse(JSON.stringify(o));}
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
+function bare(u){return u.trim().replace(/^https?:\/\//i,"").replace(/^www\./i,"").replace(/\/+$/,"");}
+function looksLikeUrl(u){return /^(https?:\/\/)?[^\s\/]+\.[^\s]+$/i.test(u.trim());}
+function toUrl(u){u=u.trim();return /^https?:\/\//i.test(u)?u:"https://"+u;}
+function isHex(c){return /^#[0-9a-f]{6}$/i.test(c);}
+function rgb(h){return [1,3,5].map(function(i){return parseInt(h.substr(i,2),16);});}
+function lum(h){var c=rgb(h).map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);});return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];}
+function contrast(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);}
+function mix(a,b,t){var A=rgb(a),B=rgb(b);return "#"+A.map(function(v,i){return ("0"+Math.round(v+(B[i]-v)*t).toString(16)).slice(-2);}).join("");}
+function initials(n){var p=n.trim().split(/\s+/).filter(Boolean);if(!p.length)return "";if(p.length===1)return p[0].slice(0,2).toUpperCase();return (p[0][0]+p[p.length-1][0]).toUpperCase();}
+function slug(s){return (s||"signature").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"signature";}
+function isOn(id){return id==="name"||!!design.fields[id];}
+
+/* Values used to draw the signature: only ticked fields; blanks filled from the sample in sample mode. */
+function values(useSample){
+  var v={};
+  Object.keys(FIELDS).forEach(function(k){
+    if(!isOn(k)) return;
+    var s=(details[k]||"").trim();
+    if(!s&&useSample) s=FIELDS[k].sample;
+    v[k]=s;
+  });
+  v.customLabel=(details.customLabel||"").trim()||(useSample?"Portfolio":"");
+  return v;
+}
+
+function contactItems(v){
+  var out=[];
+  design.order.forEach(function(k){
+    if(!isOn(k)||!v[k]) return;
+    var f=FIELDS[k], text=v[k], href=null;
+    if(f.link==="tel"){var digits=text.replace(/[^\d+]/g,"");if(digits.length>=6) href="tel:"+digits;}
+    else if(f.link==="mail"){if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) href="mailto:"+text;}
+    else if(f.link==="url"){if(looksLikeUrl(text)){href=toUrl(text);text=bare(text);}}
+    var words=f.words, short=f.short;
+    if(k==="custom"&&v.customLabel){words=v.customLabel;short=v.customLabel.slice(0,1).toUpperCase();}
+    out.push({id:k,text:text,href:href,words:words,short:short});
+  });
+  return out;
+}
+
+/* --------------------------------------------------- signature (email HTML) */
+/* Tables and inline styles only: that is what survives Gmail, Outlook's Word renderer and Apple Mail. */
+function buildSignature(v){
+  if(!v.name&&!contactItems(v).length) return "";
+  var d=design, sz=SIZES[d.size]||SIZES.m;
+  var acc=isHex(d.accent)?d.accent:DEFAULT_DESIGN.accent, ink=isHex(d.text)?d.text:DEFAULT_DESIGN.text;
+  var soft=mix(ink,"#ffffff",0.38), faint=mix(ink,"#ffffff",0.55);
+  var nf=(FONTS[d.nameFont]||FONTS.georgia).stack, bf=(FONTS[d.bodyFont]||FONTS.arial).stack;
+  var linkCol=d.links==="accent"?acc:ink;
+  var divLine=d.divider==="accent"?"2px solid "+acc:d.divider==="thin"?"1px solid "+mix(ink,"#ffffff",0.78):"";
+  var radius=d.shape==="circle"?"50%":d.shape==="rounded"?"8px":"0";
+  var flow=d.layout==="compact"?"inline":d.flow;
+  var T='cellpadding="0" cellspacing="0" border="0" role="presentation"';
+  var tbl='<table '+T+' style="border-collapse:collapse;';
+
+  /* badge */
+  function badge(){
+    if(d.badge==="initials"){
+      var ini=initials(v.name||""); if(!ini) return "";
+      var n=d.layout==="compact"?Math.round(sz.badge*0.8):sz.badge, fg=lum(acc)>0.45?ink:"#FFFFFF";
+      return tbl+'"><tr><td width="'+n+'" height="'+n+'" align="center" valign="middle" bgcolor="'+acc+'" style="width:'+n+'px;height:'+n+'px;background-color:'+acc+';border-radius:'+radius+';color:'+fg+';font-family:'+nf+';font-size:'+Math.round(n*0.38)+'px;font-weight:bold;letter-spacing:1px;text-align:center;vertical-align:middle;line-height:'+n+'px;">'+esc(ini)+'</td></tr></table>';
+    }
+    if(d.badge==="logo"){
+      var w=logoW(), alt=esc(v.company||v.name||"Logo");
+      if(d.logoMode==="upload"&&d.logoData){
+        /* shape is already cut into the pixels, so no border-radius needed */
+        var h=logoImg?Math.round(w*logoImg.ratio):0;
+        return '<img src="'+d.logoData+'" width="'+w+'"'+(h?' height="'+h+'"':'')+' alt="'+alt+'" style="display:block;width:'+w+'px;max-width:'+w+'px;'+(h?'height:'+h+'px;':'height:auto;')+'border:0;outline:none;">';
+      }
+      if(d.logoMode==="url"&&/^https?:\/\/\S+$/i.test(d.logoUrl.trim()))
+        return '<img src="'+esc(d.logoUrl.trim())+'" width="'+w+'" alt="'+alt+'" style="display:block;width:'+w+'px;max-width:'+w+'px;height:auto;border:0;outline:none;border-radius:'+radius+';">';
+    }
+    return "";
+  }
+
+  /* name and role */
+  function nameHtml(){
+    if(!v.name) return "";
+    var st='font-family:'+nf+';font-size:'+sz.name+'px;line-height:'+(sz.name+5)+'px;font-weight:'+(d.nameBold?"bold":"normal")+';color:'+(d.nameAccent?acc:ink)+';'+(d.nameUpper?'text-transform:uppercase;letter-spacing:1px;':'');
+    var pr=v.pronouns?' <span style="font-family:'+bf+';font-size:'+sz.small+'px;font-weight:normal;color:'+soft+';text-transform:none;letter-spacing:0;">('+esc(v.pronouns)+')</span>':"";
+    return '<span style="'+st+'">'+esc(v.name)+'</span>'+pr;
+  }
+  function identBlock(){
+    var h="";
+    if(v.name) h+='<div style="margin:0;">'+nameHtml()+'</div>';
+    if(v.title) h+='<div style="font-family:'+bf+';font-size:'+sz.body+'px;line-height:'+(sz.body+5)+'px;color:'+soft+';padding-top:2px;">'+esc(v.title)+'</div>';
+    if(v.company) h+='<div style="font-family:'+bf+';font-size:'+sz.body+'px;line-height:'+(sz.body+5)+'px;font-weight:bold;color:'+acc+';">'+esc(v.company)+'</div>';
+    return h;
+  }
+  function identInline(){
+    var bits=[];
+    if(v.title) bits.push(esc(v.title));
+    if(v.company) bits.push('<span style="color:'+acc+';font-weight:bold;">'+esc(v.company)+'</span>');
+    var sep='<span style="color:'+faint+';">&nbsp;&nbsp;|&nbsp;&nbsp;</span>';
+    return '<div style="font-family:'+bf+';font-size:'+sz.body+'px;line-height:'+(sz.name+5)+'px;color:'+soft+';">'+nameHtml()+(bits.length?sep+bits.join(sep):"")+'</div>';
+  }
+
+  /* contact lines */
+  function val(it){
+    var t=esc(it.text);
+    if(!it.href) return '<span style="color:'+ink+';">'+t+'</span>';
+    return '<a href="'+esc(it.href)+'" style="color:'+linkCol+';text-decoration:none;"><span style="color:'+linkCol+';text-decoration:none;">'+t+'</span></a>';
+  }
+  function labelText(it){return d.labels==="words"?it.words:d.labels==="short"?it.short:"";}
+  function contactsRows(items){
+    if(!items.length) return "";
+    var rows=items.map(function(it){
+      var lab=labelText(it);
+      var cellVal='<td valign="top" style="padding:1px 0;font-family:'+bf+';font-size:'+sz.body+'px;line-height:'+(sz.body+6)+'px;color:'+ink+';">'+val(it)+'</td>';
+      if(!lab) return '<tr>'+cellVal+'</tr>';
+      return '<tr><td valign="top" style="padding:1px 10px 1px 0;font-family:'+bf+';font-size:'+(sz.small-1)+'px;line-height:'+(sz.body+6)+'px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:'+acc+';white-space:nowrap;">'+esc(lab)+'</td>'+cellVal+'</tr>';
+    }).join("");
+    return tbl+'">'+rows+'</table>';
+  }
+  function contactsInline(items){
+    if(!items.length) return "";
+    var sep='<span style="color:'+faint+';">&nbsp;&nbsp;|&nbsp;&nbsp;</span>';
+    return '<div style="font-family:'+bf+';font-size:'+sz.body+'px;line-height:'+(sz.body+8)+'px;color:'+ink+';">'+items.map(function(it){
+      var lab=labelText(it);
+      return (lab?'<span style="font-size:'+(sz.small-1)+'px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:'+acc+';">'+esc(lab)+'</span>&nbsp;':"")+val(it);
+    }).join(sep)+'</div>';
+  }
+  var items=contactItems(v);
+  var contacts=flow==="inline"?contactsInline(items):contactsRows(items);
+  var b=badge(), body="";
+  var gapTop=contacts?'<div style="height:'+(flow==="inline"?4:8)+'px;line-height:4px;font-size:4px;">&nbsp;</div>':"";
+
+  if(d.layout==="side"||d.layout==="compact"){
+    var inner=(d.layout==="compact"?identInline():identBlock())+gapTop+contacts;
+    var left=b?'<td valign="top" style="padding:0 14px 0 0;vertical-align:top;">'+b+'</td>':"";
+    body=tbl+'"><tr>'+left+'<td valign="top" style="vertical-align:top;padding:0 0 0 '+(divLine?14:0)+'px;'+(divLine?'border-left:'+divLine+';':'')+'">'+inner+'</td></tr></table>';
+  } else if(d.layout==="stacked"){
+    var rows='';
+    if(b) rows+='<tr><td style="padding:0 0 10px 0;">'+b+'</td></tr>';
+    rows+='<tr><td style="padding:0;">'+identBlock()+'</td></tr>';
+    if(divLine&&contacts) rows+='<tr><td style="padding:8px 0 0 0;"><table '+T+' width="100%" style="border-collapse:collapse;"><tr><td height="1" style="height:1px;line-height:1px;font-size:1px;border-top:'+divLine+';">&nbsp;</td></tr></table></td></tr>';
+    if(contacts) rows+='<tr><td style="padding:'+(divLine?4:8)+'px 0 0 0;">'+contacts+'</td></tr>';
+    body=tbl+'">'+rows+'</table>';
+  } else { /* boxed */
+    var border=mix(acc,"#ffffff",0.72);
+    var cols=b?2:1;
+    var bar=d.divider==="none"?"":'<tr><td colspan="'+cols+'" height="4" bgcolor="'+(d.divider==="thin"?border:acc)+'" style="height:4px;line-height:4px;font-size:4px;background-color:'+(d.divider==="thin"?border:acc)+';">&nbsp;</td></tr>';
+    var cellB=b?'<td valign="top" style="padding:16px 0 16px 16px;vertical-align:top;">'+b+'</td>':"";
+    body=tbl+'border:1px solid '+border+';"><tbody>'+bar+'<tr>'+cellB+'<td valign="top" style="padding:14px 18px 16px 16px;vertical-align:top;">'+identBlock()+gapTop+contacts+'</td></tr></tbody></table>';
+  }
+
+  var out="";
+  if(v.signoff) out+='<div style="font-family:'+bf+';font-size:'+(sz.body+1)+'px;line-height:'+(sz.body+7)+'px;color:'+ink+';padding:0 0 10px 0;">'+esc(v.signoff)+'</div>';
+  out+=body;
+  if(v.hours) out+='<div style="font-family:'+bf+';font-size:'+sz.small+'px;line-height:'+(sz.small+5)+'px;color:'+soft+';font-style:italic;padding:12px 0 0 0;max-width:560px;">'+esc(v.hours)+'</div>';
+  if(v.disclaimer) out+='<div style="font-family:'+bf+';font-size:'+(sz.small-1)+'px;line-height:'+(sz.small+4)+'px;color:'+faint+';padding:12px 0 0 0;max-width:560px;">'+esc(v.disclaimer).replace(/\n/g,"<br>")+'</div>';
+  return out;
+}
+
+function buildPlain(v){
+  var L=[];
+  if(v.signoff){L.push(v.signoff);L.push("");}
+  if(v.name) L.push(v.name+(v.pronouns?" ("+v.pronouns+")":""));
+  var role=[v.title,v.company].filter(Boolean).join(", ");
+  if(role) L.push(role);
+  var items=contactItems(v);
+  if(items.length&&L.length) L.push("");
+  items.forEach(function(it){
+    var lab=design.labels==="words"?it.words+": ":design.labels==="short"?it.short+"  ":"";
+    L.push(lab+it.text);
+  });
+  if(v.hours){L.push("");L.push(v.hours);}
+  if(v.disclaimer){L.push("");L.push(v.disclaimer);}
+  return L.join("\n");
+}
+
+/* ---------------------------------------------------------- design form */
+function buildSwatches(el,list,key){
+  el.innerHTML="";
+  list.forEach(function(c){
+    var b=document.createElement("button");
+    b.type="button";b.className="sw";b.style.background=c[0];b.dataset.c=c[0];
+    b.setAttribute("aria-label",c[1]);b.title=c[1];
+    el.appendChild(b);
+  });
+  var pick=document.createElement("input");
+  pick.type="color";pick.id=key+"-custom";pick.setAttribute("aria-label","Custom "+(key==="accent"?"accent":"text")+" colour");
+  el.appendChild(pick);
+  var hx=document.createElement("span");hx.className="hex";hx.id=key+"-hex";el.appendChild(hx);
+  el.addEventListener("click",function(e){var b=e.target.closest(".sw");if(!b)return;design[key]=b.dataset.c;changed();});
+  pick.addEventListener("input",function(){design[key]=pick.value.toUpperCase();changed();});
+}
+
+function buildFieldControls(){
+  var ident=$("ident-fields"), extra=$("extra-fields");
+  ident.innerHTML="";extra.innerHTML="";
+  Object.keys(FIELDS).forEach(function(k){
+    var f=FIELDS[k];
+    if(f.kind==="contact") return;
+    var lab=document.createElement("label");
+    if(k==="name"){lab.innerHTML='<input type="checkbox" checked disabled> Name <span class="small">(always)</span>';}
+    else{lab.innerHTML='<input type="checkbox" id="on-'+k+'"> '+esc(f.label);}
+    (f.kind==="ident"?ident:extra).appendChild(lab);
+  });
+  ident.addEventListener("change",onFieldToggle);
+  extra.addEventListener("change",onFieldToggle);
+  renderContactList();
+}
+function onFieldToggle(e){
+  var t=e.target; if(!t.id||t.id.indexOf("on-")!==0) return;
+  design.fields[t.id.slice(3)]=t.checked; changed(true);
+}
+function renderContactList(){
+  var ul=$("contact-fields"); ul.innerHTML="";
+  design.order.forEach(function(k,i){
+    var li=document.createElement("li"); if(!design.fields[k]) li.className="off";
+    li.innerHTML='<label><input type="checkbox" id="on-'+k+'"'+(design.fields[k]?" checked":"")+'> '+esc(FIELDS[k].label)+'</label>'
+      +'<span class="mv"><button type="button" data-mv="-1" data-k="'+k+'" aria-label="Move '+esc(FIELDS[k].label)+' up"'+(i===0?" disabled":"")+'>↑</button>'
+      +'<button type="button" data-mv="1" data-k="'+k+'" aria-label="Move '+esc(FIELDS[k].label)+' down"'+(i===design.order.length-1?" disabled":"")+'>↓</button></span>';
+    ul.appendChild(li);
+  });
+}
+$("contact-fields").addEventListener("change",function(e){onFieldToggle(e);renderContactList();var c=$(e.target.id);if(c)c.focus();});
+$("contact-fields").addEventListener("click",function(e){
+  var b=e.target.closest("button[data-mv]"); if(!b) return;
+  var k=b.dataset.k, dir=+b.dataset.mv, o=design.order, i=o.indexOf(k), j=i+dir;
+  if(j<0||j>=o.length) return;
+  o[i]=o[j]; o[j]=k; renderContactList(); changed(true);
+  var again=document.querySelector('#contact-fields button[data-k="'+k+'"][data-mv="'+dir+'"]');
+  if(again&&!again.disabled) again.focus(); else { var other=document.querySelector('#contact-fields button[data-k="'+k+'"]:not([disabled])'); if(other) other.focus(); }
+});
+
+function fillSelects(){
+  ["nameFont","bodyFont"].forEach(function(id){
+    var s=$(id); s.innerHTML="";
+    Object.keys(FONTS).forEach(function(k){var o=document.createElement("option");o.value=k;o.textContent=FONTS[k].label;o.style.fontFamily=FONTS[k].stack;s.appendChild(o);});
+    s.addEventListener("change",function(){design[id]=s.value;changed();});
+  });
+}
+
+/* radio groups bound straight to design keys */
+["layout","flow","links","size","labels","divider","badge","shape","logoMode"].forEach(function(name){
+  document.querySelectorAll('input[name="'+name+'"]').forEach(function(r){
+    r.addEventListener("change",function(){if(r.checked){design[name]=r.value;if(name==="shape")reencode();changed(name==="layout"||name==="badge");}});
+  });
+});
+["nameBold","nameUpper","nameAccent"].forEach(function(id){$(id).addEventListener("change",function(){design[id]=$(id).checked;changed();});});
+$("logoUrl").addEventListener("input",function(){design.logoUrl=this.value;changed();});
+$("logoWidth").addEventListener("input",function(){design.logoWidth=parseInt(this.value,10)||64;clearTimeout(reTimer);reTimer=setTimeout(function(){reencode();render();},150);changed();});
+
+function syncDesignForm(){
+  function setRadio(n,v){var r=document.querySelector('input[name="'+n+'"][value="'+v+'"]');if(r)r.checked=true;}
+  ["layout","flow","links","size","labels","divider","badge","shape","logoMode"].forEach(function(n){setRadio(n,design[n]);});
+  $("nameFont").value=design.nameFont; $("bodyFont").value=design.bodyFont;
+  ["nameBold","nameUpper","nameAccent"].forEach(function(id){$(id).checked=!!design[id];});
+  $("logoUrl").value=design.logoUrl; $("logoWidth").value=design.logoWidth;
+  Object.keys(design.fields).forEach(function(k){var c=$("on-"+k);if(c)c.checked=!!design.fields[k];});
+  renderContactList();
+  reflectDesign();
+}
+function reflectDesign(){
+  [["accent","accent-swatches"],["text","text-swatches"]].forEach(function(p){
+    var key=p[0];
+    document.querySelectorAll("#"+p[1]+" .sw").forEach(function(b){b.setAttribute("aria-pressed",b.dataset.c.toLowerCase()===design[key].toLowerCase()?"true":"false");});
+    $(key+"-custom").value=design[key].toLowerCase(); $(key+"-hex").textContent=design[key].toUpperCase();
+  });
+  $("contrast-note").hidden=!(isHex(design.accent)&&contrast(design.accent,"#ffffff")<3);
+  $("logo-fields").hidden=design.badge!=="logo";
+  $("shape-fields").hidden=design.badge==="none";
+  var up=design.badge==="logo"&&design.logoMode==="upload";
+  $("shape-hint").hidden=design.shape==="square"||up;
+  $("shape-hint-up").hidden=design.shape==="square"||!up;
+  $("upload-fields").hidden=design.logoMode!=="upload";
+  $("url-fields").hidden=design.logoMode!=="url";
+  var has=!!design.logoData;
+  $("upload-actions").hidden=!has; $("logo-thumb").hidden=!has; $("logo-size").hidden=!has;
+  if(has){
+    $("logo-thumb").src=design.logoData;
+    $("drop-title").textContent=design.logoName||"Uploaded image";
+    $("drop-hint").textContent="Click or drop another image to replace it.";
+    var kb=Math.round(design.logoData.length*0.75/1024);
+    $("logo-size").textContent="Adds about "+kb+" KB to the signature ("+(logoImg?logoImg.outW+" × "+logoImg.outH+" pixels, sharp on high-resolution screens":"")+")."+(kb>60?" That is on the large side; a smaller width or a simpler image will keep emails lighter.":"");
+  } else {
+    $("drop-title").textContent="Choose an image";
+    $("drop-hint").textContent="or drop one here. PNG, JPEG, GIF, WebP or SVG.";
+  }
+  var compact=design.layout==="compact";
+  document.querySelectorAll('input[name="flow"]').forEach(function(r){r.disabled=compact;});
+  $("flow-hint").hidden=!compact;
+}
+
+/* ---------------------------------------------------------- image upload */
+/* The original stays in memory only; the signature carries a copy drawn at twice the display width
+   (sharp on high-resolution screens), with the chosen shape cut out as transparency. */
+var logoSource=null;   // HTMLImageElement of the original (or of the saved copy after opening settings)
+var logoImg=null;      // {ratio,outW,outH} of the current encoded copy
+var reTimer;
+function logoW(){return Math.max(24,Math.min(240,parseInt(design.logoWidth,10)||64));}
+
+function loadImageFile(file){
+  if(!file) return;
+  if(!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(file.type)){toast("That isn’t an image this page can use. Try a PNG or JPEG.");return;}
+  if(file.size>15*1024*1024){toast("That image is over 15 MB. Try a smaller one.");return;}
+  var url=URL.createObjectURL(file), im=new Image();
+  im.onload=function(){
+    URL.revokeObjectURL(url);
+    if(!im.naturalWidth){toast("That image couldn’t be read.");return;}
+    logoSource=im; design.logoName=file.name.slice(0,120); design.badge="logo"; design.logoMode="upload";
+    reencode(); syncDesignForm(); changed();
+    toast("Image added to the signature.");
+  };
+  im.onerror=function(){URL.revokeObjectURL(url);toast("That image couldn’t be read. Try saving it as a PNG or JPEG first.");};
+  im.src=url;
+}
+
+function reencode(){
+  if(!logoSource||design.logoMode!=="upload") return;
+  var sw=logoSource.naturalWidth||logoSource.width, sh=logoSource.naturalHeight||logoSource.height;
+  if(!sw||!sh) return;
+  var sx=0, sy=0;
+  if(design.shape==="circle"&&sw!==sh){var m=Math.min(sw,sh);sx=(sw-m)/2;sy=(sh-m)/2;sw=sh=m;}
+  var target=logoW()*2, outW=Math.min(target,Math.round(sw)), outH=Math.max(1,Math.round(outW*sh/sw));
+  var c=document.createElement("canvas"); c.width=outW; c.height=outH;
+  var g=c.getContext("2d"); g.imageSmoothingQuality="high";
+  if(design.shape!=="square"){
+    g.beginPath();
+    if(design.shape==="circle") g.ellipse(outW/2,outH/2,outW/2,outH/2,0,0,Math.PI*2);
+    else { var r=Math.min(outW,outH)*0.14; g.moveTo(r,0); g.arcTo(outW,0,outW,outH,r); g.arcTo(outW,outH,0,outH,r); g.arcTo(0,outH,0,0,r); g.arcTo(0,0,outW,0,r); g.closePath(); }
+    g.clip();
+  }
+  g.drawImage(logoSource,sx,sy,sw,sh,0,0,outW,outH);
+  /* transparent pixels need PNG; fully opaque images try JPEG as well and keep the smaller */
+  var alpha=false;
+  try{var px=g.getImageData(0,0,outW,outH).data;for(var i=3;i<px.length;i+=4){if(px[i]<255){alpha=true;break;}}}catch(e){alpha=true;}
+  var png=c.toDataURL("image/png"), out=png;
+  if(!alpha){
+    var bg=document.createElement("canvas"); bg.width=outW; bg.height=outH;
+    var bgc=bg.getContext("2d"); bgc.fillStyle="#ffffff"; bgc.fillRect(0,0,outW,outH); bgc.drawImage(c,0,0);
+    var jpg=bg.toDataURL("image/jpeg",0.86); if(jpg.length<png.length) out=jpg;
+  }
+  design.logoData=out;
+  logoImg={ratio:outH/outW,outW:outW,outH:outH};
+  reflectDesign();
+}
+
+function adoptSavedLogo(){
+  /* after opening a settings file, the saved copy becomes the source for any later resizing */
+  logoSource=null; logoImg=null;
+  if(!design.logoData) return;
+  var im=new Image();
+  im.onload=function(){logoSource=im;logoImg={ratio:im.naturalHeight/im.naturalWidth,outW:im.naturalWidth,outH:im.naturalHeight};reflectDesign();render();};
+  im.src=design.logoData;
+}
+
+(function(){
+  var drop=$("drop"), file=$("logo-file");
+  function pick(){file.click();}
+  drop.addEventListener("click",pick);
+  drop.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();pick();}});
+  $("logo-replace").addEventListener("click",pick);
+  file.addEventListener("change",function(){var f=file.files&&file.files[0];file.value="";loadImageFile(f);});
+  ["dragenter","dragover"].forEach(function(t){drop.addEventListener(t,function(e){e.preventDefault();drop.classList.add("over");});});
+  ["dragleave","drop"].forEach(function(t){drop.addEventListener(t,function(){drop.classList.remove("over");});});
+  drop.addEventListener("drop",function(e){e.preventDefault();var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];loadImageFile(f);});
+  $("logo-remove").addEventListener("click",function(){logoSource=null;logoImg=null;design.logoData="";design.logoName="";changed();toast("Image removed.");});
+  $("logo-download").addEventListener("click",function(){
+    if(!design.logoData) return;
+    var ext=design.logoData.indexOf("image/png")>-1?"png":"jpg";
+    var bin=atob(design.logoData.split(",")[1]), arr=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    download("signature-image."+ext,ext==="png"?"image/png":"image/jpeg",arr);
+    toast("Resized image downloaded.");
+  });
+})();
+
+/* --------------------------------------------------------- details form */
+function buildDetailsForm(){
+  var wrap=$("details-fields");
+  var keep={}; wrap.querySelectorAll("input,textarea").forEach(function(el){keep[el.id]=el.value;});
+  wrap.innerHTML="";
+  var order=["name","pronouns","title","company"].concat(design.order).concat(["signoff","hours","disclaimer"]);
+  var shown=0;
+  order.forEach(function(k){
+    if(!isOn(k)) return; shown++;
+    var f=FIELDS[k], box=document.createElement("div");
+    if(f.hasLabel){
+      box.className="two";
+      box.innerHTML=fieldHtml("customLabel","Link label",{ph:"e.g. Portfolio"})+fieldHtml(k,"Link address",f);
+    } else box.innerHTML=fieldHtml(k,f.label,f);
+    wrap.appendChild(box);
+  });
+  wrap.querySelectorAll("input,textarea").forEach(function(el){
+    var key=el.id.slice(2); el.value=details[key]||"";
+    el.addEventListener("input",function(){details[key]=el.value;dirty=true;if(mode!=="mine"){mode="mine";$("mode-mine").checked=true;}render();});
+  });
+  return shown;
+}
+function fieldHtml(k,label,f){
+  var id="d-"+k, ph=f.ph?' placeholder="'+esc(f.ph)+'"':' placeholder="'+esc(FIELDS[k]&&f.type!=="textarea"?"e.g. "+FIELDS[k].sample:"")+'"';
+  var ac=f.auto?' autocomplete="'+f.auto+'"':' autocomplete="off"';
+  var ctl=f.type==="textarea"?'<textarea id="'+id+'"'+ph+'></textarea>'
+    :'<input id="'+id+'" type="'+(f.type||"text")+'"'+ph+ac+' spellcheck="'+(k==="signoff"||k==="hours"?"true":"false")+'">';
+  return '<label class="field" for="'+id+'"><span>'+esc(label)+'</span>'+ctl+'</label>';
+}
+
+/* --------------------------------------------------------------- render */
+function render(){
+  var useSample=mode==="sample";
+  var v=values(useSample), html=buildSignature(v);
+  $("preview").innerHTML=html||'<div class="empty">Add your name or at least one contact detail to see the signature.</div>';
+  var mine=values(false), out=buildSignature(mine);
+  $("code").value=out;
+}
+function changed(structural){
+  dirty=true; reflectDesign();
+  if(structural) buildDetailsForm();
+  render();
+}
+
+/* ----------------------------------------------------------------- tabs */
+function showTab(name,focus){
+  activeTab=name==="details"?"details":"design";
+  var isD=activeTab==="design";
+  $("tab-design").setAttribute("aria-selected",isD); $("tab-details").setAttribute("aria-selected",!isD);
+  $("tab-design").tabIndex=isD?0:-1; $("tab-details").tabIndex=isD?-1:0;
+  $("panel-design").hidden=!isD; $("panel-details").hidden=isD;
+  $("actions").hidden=isD; $("mode-seg").hidden=!isD;
+  if(!isD){ mode="mine"; $("mode-mine").checked=true; }
+  render();
+  try{history.replaceState(null,"","#"+activeTab);}catch(e){}
+  if(focus) $("tab-"+activeTab).focus();
+  if(!isD&&focus!==false){ var first=document.querySelector("#details-fields input,#details-fields textarea"); if(first&&focus==="field") first.focus(); }
+}
+$("tab-design").addEventListener("click",function(){showTab("design");});
+$("tab-details").addEventListener("click",function(){showTab("details");});
+document.querySelector(".tabs").addEventListener("keydown",function(e){
+  if(e.key==="ArrowRight"||e.key==="ArrowLeft"||e.key==="Home"||e.key==="End"){e.preventDefault();showTab(activeTab==="design"?"details":"design",true);}
+});
+document.querySelectorAll("[data-go]").forEach(function(b){b.addEventListener("click",function(){showTab(b.dataset.go,"field");window.scrollTo({top:0,behavior:"smooth"});});});
+
+document.querySelectorAll('input[name="mode"]').forEach(function(r){r.addEventListener("change",function(){if(r.checked){mode=r.value;render();}});});
+document.querySelectorAll('input[name="width"]').forEach(function(r){r.addEventListener("change",function(){$("sheet").classList.toggle("phone",r.value==="phone"&&r.checked);});});
+
+/* ------------------------------------------------------- copy / download */
+var toastTimer;
+function toast(msg){var t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.hidden=true;},5000);}
+function current(){var v=values(false);return {v:v,html:buildSignature(v),plain:buildPlain(v)};}
+function needSomething(c){if(!c.html){toast("Add your name or a contact detail first.");return false;}return true;}
+
+function copyRich(){
+  var c=current(); if(!needSomething(c)) return;
+  var ok=function(){toast("Signature copied. Paste it into your mail app’s signature box.");};
+  try{
+    if(!window.ClipboardItem||!navigator.clipboard||!navigator.clipboard.write) throw new Error("no rich clipboard");
+    navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([c.html],{type:"text/html"}),"text/plain":new Blob([c.plain],{type:"text/plain"})})]).then(ok,function(){selectCopy(c.html,ok);});
+  }catch(e){selectCopy(c.html,ok);}
+}
+function selectCopy(html,ok){
+  var el=document.createElement("div");
+  el.innerHTML=html; el.setAttribute("contenteditable","true");
+  el.style.cssText="position:fixed;left:-10000px;top:0;background:#ffffff;";
+  document.body.appendChild(el);
+  var r=document.createRange(); r.selectNodeContents(el);
+  var s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  var done=false; try{done=document.execCommand("copy");}catch(e){}
+  s.removeAllRanges(); document.body.removeChild(el);
+  if(done) ok(); else toast("Your browser blocked copying. Download the .html file, open it, select all and copy.");
+}
+function copyText(text,msg){
+  var fb=function(){
+    var ta=document.createElement("textarea"); ta.value=text; ta.style.cssText="position:fixed;left:-10000px;top:0;";
+    document.body.appendChild(ta); ta.select(); var okd=false; try{okd=document.execCommand("copy");}catch(e){}
+    document.body.removeChild(ta); toast(okd?msg:"Your browser blocked copying. Select the text in the box and copy it by hand.");
+  };
+  try{navigator.clipboard.writeText(text).then(function(){toast(msg);},fb);}catch(e){fb();}
+}
+function download(name,type,content){
+  var url=URL.createObjectURL(new Blob([content],{type:type}));
+  var a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
+}
+$("copy-rich").addEventListener("click",copyRich);
+$("copy-plain").addEventListener("click",function(){var c=current();if(needSomething(c))copyText(c.plain,"Plain-text signature copied.");});
+$("copy-html").addEventListener("click",function(){var c=current();if(needSomething(c))copyText(c.html,"HTML code copied.");});
+$("dl-html").addEventListener("click",function(){
+  var c=current(); if(!needSomething(c)) return;
+  var doc='<!DOCTYPE html>\n<html lang="en-GB">\n<head>\n<meta charset="utf-8">\n<title>Email signature'+(c.v.name?" - "+esc(c.v.name):"")+'</title>\n</head>\n<body style="margin:24px;background:#ffffff;">\n'+c.html+'\n</body>\n</html>\n';
+  download("email-signature-"+slug(c.v.name)+".html","text/html;charset=utf-8",doc);
+  toast("Downloaded. Open it in a browser to copy from, or point Thunderbird at it."); dirty=false;
+});
+$("dl-txt").addEventListener("click",function(){
+  var c=current(); if(!needSomething(c)) return;
+  download("email-signature-"+slug(c.v.name)+".txt","text/plain;charset=utf-8",c.plain+"\n");
+  toast("Plain-text signature downloaded."); dirty=false;
+});
+
+/* --------------------------------------------------------- settings file */
+$("save-settings").addEventListener("click",function(){
+  var data={app:"signature-builder",version:1,saved:new Date().toISOString().slice(0,10),design:design,details:details};
+  download("signature-settings"+(details.name?"-"+slug(details.name):"")+".json","application/json",JSON.stringify(data,null,2)+"\n");
+  dirty=false; toast("Settings saved. Open the file here next time to carry on.");
+});
+$("open-settings").addEventListener("click",function(){$("settings-file").click();});
+$("settings-file").addEventListener("change",function(){
+  var f=this.files&&this.files[0]; this.value=""; if(!f) return;
+  if(f.size>2000000){toast("That file is too large to be a settings file.");return;}
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var data=JSON.parse(rd.result);
+      if(!data||data.app!=="signature-builder") throw new Error("not ours");
+      applyDesign(data.design||{}); applyDetails(data.details||{}); adoptSavedLogo();
+      syncDesignForm(); buildDetailsForm();
+      mode=Object.keys(details).some(function(k){return details[k];})?"mine":"sample";
+      $("mode-"+mode).checked=true; render(); dirty=false;
+      toast("Settings opened from "+f.name+".");
+    }catch(e){toast("That file isn’t a Signature Builder settings file.");}
+  };
+  rd.onerror=function(){toast("The file couldn’t be read.");};
+  rd.readAsText(f);
+});
+function applyDesign(src){
+  var d=clone(DEFAULT_DESIGN);
+  var pick={layout:["side","stacked","compact","boxed"],flow:["rows","inline"],links:["text","accent"],size:["s","m","l"],labels:["words","short","none"],divider:["accent","thin","none"],badge:["initials","logo","none"],shape:["square","rounded","circle"]};
+  Object.keys(pick).forEach(function(k){if(pick[k].indexOf(src[k])>-1)d[k]=src[k];});
+  ["accent","text"].forEach(function(k){if(isHex(src[k]||""))d[k]=src[k].toUpperCase();});
+  ["nameFont","bodyFont"].forEach(function(k){if(FONTS[src[k]])d[k]=src[k];});
+  ["nameBold","nameUpper","nameAccent"].forEach(function(k){if(typeof src[k]==="boolean")d[k]=src[k];});
+  if(typeof src.logoUrl==="string"&&src.logoUrl.length<2000)d.logoUrl=src.logoUrl;
+  if(src.logoMode==="url"||src.logoMode==="upload")d.logoMode=src.logoMode;
+  else if(src.logoUrl)d.logoMode="url";
+  if(typeof src.logoData==="string"&&/^data:image\/(png|jpeg);base64,[A-Za-z0-9+\/=]+$/.test(src.logoData)&&src.logoData.length<1500000)d.logoData=src.logoData;
+  if(typeof src.logoName==="string")d.logoName=src.logoName.slice(0,120);
+  var w=parseInt(src.logoWidth,10); if(w>=24&&w<=240)d.logoWidth=w;
+  if(src.fields&&typeof src.fields==="object")Object.keys(d.fields).forEach(function(k){if(typeof src.fields[k]==="boolean")d.fields[k]=src.fields[k];});
+  if(Array.isArray(src.order)){
+    var seen=src.order.filter(function(k,i,a){return CONTACT_IDS.indexOf(k)>-1&&a.indexOf(k)===i;});
+    d.order=seen.concat(CONTACT_IDS.filter(function(k){return seen.indexOf(k)<0;}));
+  }
+  design=d;
+}
+function applyDetails(src){
+  details={};
+  Object.keys(FIELDS).concat(["customLabel"]).forEach(function(k){if(typeof src[k]==="string")details[k]=src[k].slice(0,2000);});
+}
+$("reset-design").addEventListener("click",function(){
+  design=clone(DEFAULT_DESIGN); logoSource=null; logoImg=null; syncDesignForm(); buildDetailsForm(); render(); toast("Design reset. Your details are unchanged.");
+});
+
+window.addEventListener("beforeunload",function(e){
+  var hasDetails=Object.keys(details).some(function(k){return (details[k]||"").trim();});
+  if(dirty&&hasDetails){e.preventDefault();e.returnValue="";}
+});
+
+/* ----------------------------------------------------------------- start */
+buildSwatches($("accent-swatches"),ACCENTS,"accent");
+buildSwatches($("text-swatches"),TEXTS,"text");
+fillSelects();
+buildFieldControls();
+syncDesignForm();
+buildDetailsForm();
+$("mode-sample").checked=true;
+showTab(location.hash==="#details"?"details":"design",false);
+dirty=false;
+})();
+</script>
+</body>
+</html>
