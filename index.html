@@ -701,7 +701,7 @@ function fillSelects(){
 /* radio groups bound straight to design keys */
 ["layout","flow","links","size","labels","divider","badge","shape","logoMode"].forEach(function(name){
   document.querySelectorAll('input[name="'+name+'"]').forEach(function(r){
-    r.addEventListener("change",function(){if(r.checked){design[name]=r.value;if(name==="shape")reencode();changed(name==="layout"||name==="badge");}});
+    r.addEventListener("change",function(){if(r.checked){design[name]=r.value;if(name==="shape"||name==="logoMode")reencode();changed(name==="layout"||name==="badge");}});
   });
 });
 ["nameBold","nameUpper","nameAccent"].forEach(function(id){$(id).addEventListener("change",function(){design[id]=$(id).checked;changed();});});
